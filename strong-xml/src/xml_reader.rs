@@ -36,8 +36,8 @@ impl<'a> XmlReader<'a> {
     }
 
     #[inline]
-    pub fn read_text(&mut self, end_tag: &str) -> XmlResult<Cow<'a, str>> {
-        let mut res = None;
+    pub fn read_text(&mut self, end_tag: &str, is_cdata: bool) -> XmlResult<Cow<'a, str>> {
+        let mut res: Option<Cow<'a, str>> = None;
 
         while let Some(token) = self.next() {
             match token? {
@@ -47,11 +47,14 @@ impl<'a> XmlReader<'a> {
                 }
                 | Token::Attribute { .. } => (),
                 Token::Text { text } => {
+                    if is_cdata && res.is_some() {
+                        continue;
+                    }
                     res = Some(xml_unescape(text.as_str())?);
                 }
                 Token::Cdata { text, .. } => {
                     res = Some(Cow::Borrowed(text.as_str()));
-                }
+                },
                 Token::ElementEnd {
                     end: ElementEnd::Close(_, _),
                     span,
@@ -258,56 +261,77 @@ fn read_text() -> XmlResult<()> {
     let mut reader = XmlReader::new("<parent></parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "");
+    assert_eq!(reader.read_text("parent", false)?, "");
     assert!(reader.next().is_none());
 
     reader = XmlReader::new("<parent>text</parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "text");
+    assert_eq!(reader.read_text("parent", false)?, "text");
+    assert!(reader.next().is_none());
+
+    reader = XmlReader::new("<parent>text</parent>");
+
+    assert!(reader.next().is_some()); // "<parent"
+    assert_eq!(reader.read_text("parent", false)?, "text");
     assert!(reader.next().is_none());
 
     reader = XmlReader::new("<parent attr=\"value\">text</parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "text");
+    assert_eq!(reader.read_text("parent", false)?, "text");
     assert!(reader.next().is_none());
 
     reader = XmlReader::new("<parent attr=\"value\">&quot;&apos;&lt;&gt;&amp;</parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, r#""'<>&"#);
+    assert_eq!(reader.read_text("parent", false)?, r#""'<>&"#);
     assert!(reader.next().is_none());
 
     let mut reader = XmlReader::new("<parent><![CDATA[]]></parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "");
+    assert_eq!(reader.read_text("parent", false)?, "");
     assert!(reader.next().is_none());
 
-    reader = XmlReader::new("<parent><![CDATA[text]]></parent>");
+    reader = XmlReader::new(
+        "<parent>
+    <![CDATA[text]]>
+</parent>",
+    );
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "text");
+    assert_eq!(reader.read_text("parent", true)?, "text");
+    assert!(reader.next().is_none());
+
+    reader = XmlReader::new(
+        "<parent>text</parent>",
+    );
+
+    assert!(reader.next().is_some()); // "<parent"
+    assert_eq!(reader.read_text("parent", true)?, "text");
     assert!(reader.next().is_none());
 
     reader = XmlReader::new("<parent attr=\"value\"><![CDATA[text]]></parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "text");
+    assert_eq!(reader.read_text("parent", false)?, "text");
     assert!(reader.next().is_none());
 
     reader = XmlReader::new("<parent attr=\"value\"><![CDATA[<foo></foo>]]></parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "<foo></foo>");
+    assert_eq!(reader.read_text("parent", false)?, "<foo></foo>");
     assert!(reader.next().is_none());
 
     reader =
         XmlReader::new("<parent attr=\"value\"><![CDATA[&quot;&apos;&lt;&gt;&amp;]]></parent>");
 
     assert!(reader.next().is_some()); // "<parent"
-    assert_eq!(reader.read_text("parent")?, "&quot;&apos;&lt;&gt;&amp;");
+    assert_eq!(
+        reader.read_text("parent", false)?,
+        "&quot;&apos;&lt;&gt;&amp;"
+    );
     assert!(reader.next().is_none());
 
     Ok(())

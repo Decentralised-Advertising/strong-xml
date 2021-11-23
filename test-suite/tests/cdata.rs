@@ -25,7 +25,7 @@ fn test() -> XmlResult<()> {
             bar: Bar("<".into()),
             baz: ">".into()
         },
-        Foo::from_str(r#"<foo><bar>&lt;</bar><qux>&gt;</qux></foo>"#)?
+        Foo::from_str(r#"<foo><bar><![CDATA[<]]></bar><qux><![CDATA[>]]></qux></foo>"#)?
     );
 
     assert_eq!(
@@ -41,7 +41,11 @@ fn test() -> XmlResult<()> {
             bar: Bar("&lt;".into()),
             baz: "&gt;".into()
         },
-        Foo::from_str(r#"<foo><bar><![CDATA[&lt;]]></bar><qux><![CDATA[&gt;]]></qux></foo>"#)?
+        Foo::from_str(r#"<foo><bar>
+    <![CDATA[&lt;]]>
+</bar><qux>
+    <![CDATA[&gt;]]>
+</qux></foo>"#)?
     );
 
     assert_eq!(
