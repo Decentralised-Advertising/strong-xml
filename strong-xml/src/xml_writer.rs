@@ -5,13 +5,11 @@ use crate::xml_escape::xml_escape;
 
 pub struct XmlWriter<W: Write> {
     pub inner: W,
-    pub pretty: bool,
-    pub indent: usize,
 }
 
 impl<W: Write> XmlWriter<W> {
-    pub fn new(inner: W, pretty: bool) -> Self {
-        XmlWriter { inner, pretty, indent: 0 }
+    pub fn new(inner: W) -> Self {
+        XmlWriter { inner }
     }
 
     pub fn into_inner(self) -> W {
